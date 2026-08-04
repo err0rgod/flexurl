@@ -17,7 +17,7 @@ router = APIRouter()
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 FIREBASE_ADMIN_SDK_JSON = os.getenv("FIREBASE_ADMIN_SDK_JSON")
 
-from core.logger import core.logger
+from core.logger import logger
 
 # Initialize Firebase Admin SDK if not already initialized
 if not firebase_admin._apps:

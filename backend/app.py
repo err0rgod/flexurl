@@ -34,7 +34,7 @@ import jwt
 from sqlmodel import Session, select
 from sqlalchemy import func, text
 from contextlib import asynccontextmanager
-from core.logger import core.logger
+from core.logger import logger
 from services.report_scheduler import daily_report_scheduler_loop
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -79,7 +79,7 @@ async def get_developer_user_id(request: Request) -> int:
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     
     # 3. Check Redis Cache
-    from utils.short_url_gen import core.redis_client
+    from utils.short_url_gen import redis_client
     try:
         cached = redis_client.get(f"api_key:{key_hash}")
         if cached:
@@ -690,7 +690,7 @@ async def verify_payment(req_data: PaymentVerifyRequest, user_id: int = Depends(
         db_session.commit()
         db_session.refresh(user)
         try:
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             redis_client.delete(f"user_tier:{user_id}")
         except Exception:
             pass
@@ -1062,7 +1062,7 @@ async def delete_user_domain(domain_id: int, user_id: int = Depends(get_required
         db_session.delete(domain)
         db_session.commit()
         try:
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             redis_client.delete(f"dom_owner:{domain.domain_name}")
         except Exception:
             pass
@@ -1232,7 +1232,7 @@ async def toggle_user_tier(user_id: int = Depends(get_required_user_id)):
         db_session.commit()
         db_session.refresh(user)
         try:
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             redis_client.delete(f"user_tier:{user_id}")
         except Exception:
             pass
@@ -1344,7 +1344,7 @@ async def edit_link(short_url: str, edit_data: URLEditRequest, user_id: int = De
 
         # Invalidate/Update Redis cache
         try:
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             is_dynamic = bool(url_entry.webhook_url or url_entry.ios_url or url_entry.android_url or url_entry.password_hash or url_entry.fallback_url or url_entry.activation_time or url_entry.custom_countdown_url)
             
             is_expired = False
@@ -1386,7 +1386,7 @@ async def delete_link(short_url: str, user_id: int = Depends(get_required_user_i
 
         # Delete from Redis
         try:
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             redis_client.delete(short_url)
         except Exception:
             pass
@@ -1413,7 +1413,7 @@ async def delete_user_account(user_id: int = Depends(get_required_user_id)):
             db_session.delete(link)
             # Remove link from Redis
             try:
-                from utils.short_url_gen import core.redis_client
+                from utils.short_url_gen import redis_client
                 redis_client.delete(link.short_url)
             except Exception:
                 pass
@@ -1429,7 +1429,7 @@ async def delete_user_account(user_id: int = Depends(get_required_user_id)):
         # Delete from Firebase Auth if firebase UID is available
         if oauth_provider == "firebase" and oauth_id:
             try:
-                from firebase_admin import api.routes.auth as firebase_auth
+                from firebase_admin import auth as firebase_auth
                 firebase_auth.delete_user(oauth_id)
             except Exception as e:
                 logger.warning(f"Failed to delete user from Firebase Auth: {e}")
@@ -1861,7 +1861,7 @@ async def add_long_give_short(request: URLRequest, req: Request, background_task
             if forwarded:
                 client_ip = forwarded.split(",")[0].strip()
                 
-            from utils.short_url_gen import core.redis_client
+            from utils.short_url_gen import redis_client
             redis_key = f"anon_limit:{client_ip}"
             try:
                 current_count = redis_client.incr(redis_key)
@@ -2047,7 +2047,7 @@ async def revoke_api_key(key_id: int, user_id: int = Depends(get_required_user_i
         db_session.add(key_entry)
         db_session.commit()
         
-        from utils.short_url_gen import core.redis_client
+        from utils.short_url_gen import redis_client
         try:
             redis_client.delete(f"api_key:{key_entry.key_hash}")
         except Exception:

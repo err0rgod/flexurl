@@ -1,6 +1,6 @@
 import os
 import httpx
-from core.logger import core.logger
+from core.logger import logger
 
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
 CLOUDFLARE_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID")

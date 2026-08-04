@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlmodel import Session, select
 from arq import cron
 
-from core.logger import core.logger
+from core.logger import logger
 from core.database import engine, add_clicklog
 from models.domain import urldata, clicklog, User
 from utils.analytics_parser import parse_referer, parse_user_agent, check_is_bot
@@ -15,7 +15,7 @@ from services.arq_settings import (
     redis_settings, CLICK_FLUSH_INTERVAL, GEO_CACHE_TTL,
     REDIS_LOCK_TIMEOUT, GEO_IP_TIMEOUT, WEBHOOK_TIMEOUT
 )
-from core.redis_client import core.redis_client
+from core.redis_client import redis_client
 
 # Global HTTP client to reuse connections
 http_client = None
