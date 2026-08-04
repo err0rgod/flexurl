@@ -2,6 +2,7 @@ import os
 import asyncio
 import datetime
 import httpx
+import redis
 from datetime import UTC, timedelta
 from sqlmodel import Session, select, func
 from database import engine
@@ -12,6 +13,110 @@ from logger import logger, log_file
 # Fetch configuration parameters
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 TARGET_EMAIL = os.getenv("ADMIN_EMAIL")
+
+# Per-day claim key lives long enough to cover the full UTC day + restarts.
+# Using a dedicated Redis client with sane timeouts so the once-daily job is
+# not flaky under the 100ms timeouts used by the hot-path redis_client.
+DAILY_JOB_KEY_PREFIX = "daily_report_sent:"
+DAILY_JOB_TTL_SECONDS = 60 * 60 * 48  # 48 hours
+
+_scheduler_redis = redis.Redis(
+    host=os.getenv("REDIS_HOST", "127.0.0.1"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+    decode_responses=True,
+    socket_connect_timeout=2.0,
+    socket_timeout=2.0,
+)
+
+
+def _daily_job_redis_key(current_date: str) -> str:
+    return f"{DAILY_JOB_KEY_PREFIX}{current_date}"
+
+
+def _daily_job_claim_file(current_date: str) -> str:
+    """Per-date claim file used when Redis is unavailable (same host only)."""
+    return os.path.join(os.path.dirname(log_file), f"daily_report_claimed_{current_date}")
+
+
+def try_claim_daily_job(current_date: str) -> bool:
+    """
+    Atomically claim the right to run the daily report + dunning job for this UTC date.
+
+    Primary: Redis SET NX (safe across Gunicorn/Uvicorn workers and hosts sharing Redis).
+    Fallback: exclusive file create (safe across workers on one machine if Redis is down).
+
+    Returns True only for the single winner that should send.
+    """
+    # If a prior run on this host already claimed via file (e.g. Redis was down),
+    # do not re-claim through Redis when it comes back.
+    claim_path = _daily_job_claim_file(current_date)
+    if os.path.exists(claim_path):
+        logger.info(f"Daily report job for {current_date} already claimed locally; skipping.")
+        return False
+
+    redis_key = _daily_job_redis_key(current_date)
+
+    try:
+        claimed = _scheduler_redis.set(
+            redis_key,
+            "1",
+            nx=True,
+            ex=DAILY_JOB_TTL_SECONDS,
+        )
+        if claimed:
+            # Best-effort local marker so a later Redis outage still sees "already done".
+            try:
+                fd = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                with os.fdopen(fd, "w") as f:
+                    f.write(current_date)
+            except FileExistsError:
+                # Another local worker won the file race; we still hold Redis so we run.
+                pass
+            except Exception as fe:
+                logger.warning(f"Claimed daily job in Redis but failed to write local marker: {fe}")
+            logger.info(f"Claimed daily report job for {current_date} via Redis.")
+            return True
+
+        logger.info(f"Daily report job for {current_date} already claimed by another worker; skipping.")
+        return False
+    except Exception as re:
+        logger.warning(f"Redis claim failed for daily report ({re}); falling back to local file claim.")
+        return _try_claim_daily_job_file(current_date)
+
+
+def _try_claim_daily_job_file(current_date: str) -> bool:
+    """Exclusive local file claim (O_CREAT|O_EXCL). Only correct on a single host."""
+    path = _daily_job_claim_file(current_date)
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w") as f:
+            f.write(current_date)
+        logger.info(f"Claimed daily report job for {current_date} via local file fallback.")
+        return True
+    except FileExistsError:
+        logger.info(f"Daily report job for {current_date} already claimed locally; skipping.")
+        return False
+    except Exception as fe:
+        logger.error(f"Failed local file claim for daily report: {fe}")
+        # Fail closed: better to skip than multi-send if we cannot coordinate.
+        return False
+
+
+def release_daily_job_claim(current_date: str) -> None:
+    """
+    Release the claim so another poll in the midnight window can retry after a send failure.
+    """
+    try:
+        _scheduler_redis.delete(_daily_job_redis_key(current_date))
+    except Exception as re:
+        logger.warning(f"Failed to release Redis daily report claim for {current_date}: {re}")
+
+    path = _daily_job_claim_file(current_date)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception as fe:
+        logger.warning(f"Failed to release local daily report claim file for {current_date}: {fe}")
 
 def get_log_counts_24h() -> dict:
     """
@@ -43,10 +148,13 @@ def get_log_counts_24h() -> dict:
         logger.error(f"Failed to parse daily logs: {e}")
     return counts
 
-def generate_and_send_report():
+def generate_and_send_report() -> bool:
     """
-    Queries database metrics for unique visitors, link redirects, and link creations 
+    Queries database metrics for unique visitors, link redirects, and link creations
     along with log occurrences in the last 24 hours, dispatches an HTML report to the admin.
+
+    Returns True if the job completed (sent or intentionally skipped), False if a
+    retriable failure occurred (caller should release the daily claim).
     """
     logger.info("Starting production daily analytics compilation...")
     
@@ -77,11 +185,12 @@ def generate_and_send_report():
     
     if not RESEND_API_KEY:
         logger.warning("RESEND_API_KEY is not defined in the environment. Skipping daily report dispatch.")
-        return
+        # Completed (nothing to send) so we do not thrash every 15 minutes without config.
+        return True
         
     if not TARGET_EMAIL:
         logger.warning("ADMIN_EMAIL is not defined in the environment. Skipping daily report dispatch.")
-        return
+        return True
 
     url = "https://api.resend.com/emails"
     headers = {
@@ -160,8 +269,10 @@ def generate_and_send_report():
         resp = httpx.post(url, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
         logger.info("Daily executive summary report email dispatched successfully via Resend API.")
+        return True
     except Exception as e:
         logger.error(f"Failed to dispatch daily executive report email via Resend API: {e}")
+        return False
 
 
 def send_dunning_email(email: str, subject: str, html_body: str):
@@ -300,6 +411,9 @@ async def daily_report_scheduler_loop():
     """
     Runs an infinite async loop that checks the time every 15 minutes.
     Dispatches a daily status email at midnight UTC once daily.
+
+    Dedup is enforced by try_claim_daily_job() (Redis SET NX, file fallback) so
+    multiple Gunicorn/Uvicorn workers cannot each send the executive summary.
     """
     logger.info("Starting daily executive report background scheduler loop...")
     while True:
@@ -308,36 +422,22 @@ async def daily_report_scheduler_loop():
             now = datetime.datetime.now(datetime.timezone.utc)
             if now.hour == 0:
                 current_date = now.strftime("%Y-%m-%d")
-                
-                sent_today = False
+
+                # Claim BEFORE sending. Only one worker across the fleet wins.
+                if not try_claim_daily_job(current_date):
+                    continue
+
                 try:
-                    last_sent = redis_client.get("daily_report_last_sent")
-                    if last_sent == current_date:
-                        sent_today = True
-                except Exception as re:
-                    logger.warning(f"Failed to check Redis for report key: {re}")
-                    marker_file = os.path.join(os.path.dirname(log_file), "daily_report_last_sent.txt")
-                    if os.path.exists(marker_file):
-                        try:
-                            with open(marker_file, "r") as f:
-                                if f.read().strip() == current_date:
-                                    sent_today = True
-                        except Exception:
-                            pass
-                                
-                if not sent_today:
-                    await asyncio.to_thread(generate_and_send_report)
+                    report_ok = await asyncio.to_thread(generate_and_send_report)
                     await asyncio.to_thread(process_subscription_dunning_checks, now)
-                    
-                    try:
-                        redis_client.set("daily_report_last_sent", current_date)
-                    except Exception:
-                        pass
-                    try:
-                        marker_file = os.path.join(os.path.dirname(log_file), "daily_report_last_sent.txt")
-                        with open(marker_file, "w") as f:
-                            f.write(current_date)
-                    except Exception as fe:
-                        logger.error(f"Failed to write fallback report marker file: {fe}")
+                    if not report_ok:
+                        # Allow another poll in hour 0 to retry a failed Resend call.
+                        logger.warning(
+                            f"Daily report send failed for {current_date}; releasing claim for retry."
+                        )
+                        release_daily_job_claim(current_date)
+                except Exception as job_ex:
+                    logger.error(f"Daily report job crashed for {current_date}: {job_ex}")
+                    release_daily_job_claim(current_date)
         except Exception as ex:
             logger.critical(f"Unhandled error in daily report scheduler loop: {ex}")
