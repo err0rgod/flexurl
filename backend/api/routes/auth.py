@@ -123,7 +123,7 @@ async def create_session(data: SessionRequest):
         httponly=True,
         max_age=604800,
         samesite="lax",
-        secure=True
+        secure=False
     )
     return json_response
 
