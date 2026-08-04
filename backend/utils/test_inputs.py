@@ -3,7 +3,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ratelimit import RateLimiterStore
+from utils.ratelimit import RateLimiterStore
 
 app = FastAPI()
 

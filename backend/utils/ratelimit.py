@@ -1,6 +1,6 @@
 import time
-from redis_client import redis_client
-from logger import logger
+from core.redis_client import redis_client
+from core.logger import logger
 
 class TokenBucket:
     """

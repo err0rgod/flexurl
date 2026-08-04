@@ -5,10 +5,10 @@ import httpx
 import redis
 from datetime import UTC, timedelta
 from sqlmodel import Session, select, func
-from database import engine
-from models import clicklog, urldata, Subscription, User
-from short_url_gen import redis_client
-from logger import logger, log_file
+from core.database import engine
+from models.domain import clicklog, urldata, Subscription, User
+from utils.short_url_gen import redis_client
+from core.logger import logger, log_file
 
 # Fetch configuration parameters
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")

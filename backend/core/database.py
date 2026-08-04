@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from sqlmodel import create_engine,SQLModel, Session, select
 from typing import Optional
-from models import urldata, User, clicklog, CustomDomain, ApiKey
+from models.domain import urldata, User, clicklog, CustomDomain, ApiKey
 from datetime import datetime, UTC
 
 

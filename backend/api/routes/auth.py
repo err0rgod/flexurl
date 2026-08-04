@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 import jwt
 import time
-from database import get_user_by_email, create_user, engine
-from models import User
+from core.database import get_user_by_email, create_user, engine
+from models.domain import User
 from sqlmodel import Session, select
 import os
 from dotenv import load_dotenv
@@ -17,14 +17,15 @@ router = APIRouter()
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 FIREBASE_ADMIN_SDK_JSON = os.getenv("FIREBASE_ADMIN_SDK_JSON")
 
-from logger import logger
+from core.logger import logger
 
 # Initialize Firebase Admin SDK if not already initialized
 if not firebase_admin._apps:
     try:
         cred_path = FIREBASE_ADMIN_SDK_JSON
         if not os.path.isabs(cred_path):
-            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # auth.py is in backend/api/routes, so root is 3 levels up
+            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
             cred_path = os.path.join(parent_dir, cred_path)
             
         cred = credentials.Certificate(cred_path)

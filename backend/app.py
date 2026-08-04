@@ -12,21 +12,21 @@ if BASE_DIR not in sys.path:
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Response, Depends
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
-from short_url_gen import add_url, serve_url, ban_in_cache, add_custom_url, get_user_tier, redis_client
-from database import mark_url_banned, init_db, add_clicklog, engine
-from validations import is_valid_url, check_safe_browsing, is_valid_custom_alias
-from ratelimit import RateLimiterStore
-from auth import router as auth_router
-from quotation import process_quotation
-from cloudflare_saas import CloudflareSaaSManager
-from expiration_policy import calculate_link_expiration
-from models import (
+from utils.short_url_gen import add_url, serve_url, ban_in_cache, add_custom_url, get_user_tier, redis_client
+from core.database import mark_url_banned, init_db, add_clicklog, engine
+from utils.validations import is_valid_url, check_safe_browsing, is_valid_custom_alias
+from utils.ratelimit import RateLimiterStore
+from api.routes.auth import router as auth_router
+from api.routes.quotation import process_quotation
+from services.cloudflare_saas import CloudflareSaaSManager
+from utils.expiration_policy import calculate_link_expiration
+from models.domain import (
     clicklog, urldata, User, CustomDomain, URLRequest, URLEditRequest,
     QuoteRequest, SupportTicketRequest, PaymentOrderRequest, PaymentVerifyRequest,
     CustomDomainRequest, ApiKey, APIKeyCreateRequest, DeveloperURLRequest,
     DeveloperBatchURLRequest
 )
-from analytics_parser import parse_referer, parse_user_agent, get_ip_country, get_ip_location, check_is_bot
+from utils.analytics_parser import parse_referer, parse_user_agent, get_ip_country, get_ip_location, check_is_bot
 from typing import Optional
 from datetime import datetime, UTC
 import time
@@ -34,8 +34,8 @@ import jwt
 from sqlmodel import Session, select
 from sqlalchemy import func, text
 from contextlib import asynccontextmanager
-from logger import logger
-from report_scheduler import daily_report_scheduler_loop
+from core.logger import logger
+from services.report_scheduler import daily_report_scheduler_loop
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
