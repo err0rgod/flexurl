@@ -3,7 +3,7 @@ import json
 import httpx
 from datetime import datetime, UTC
 from dotenv import load_dotenv
-from core.logger import logger
+from core.logger import core.logger
 
 load_dotenv()
 

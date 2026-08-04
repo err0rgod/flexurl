@@ -17,7 +17,7 @@ router = APIRouter()
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 FIREBASE_ADMIN_SDK_JSON = os.getenv("FIREBASE_ADMIN_SDK_JSON")
 
-from core.logger import logger
+from core.logger import core.logger
 
 # Initialize Firebase Admin SDK if not already initialized
 if not firebase_admin._apps:
@@ -141,8 +141,8 @@ def get_subscription_details(user: User) -> dict:
     Heals/seeds the subscription table from legacy User fields if missing.
     """
     from sqlmodel import Session, select
-    from database import engine
-    from models import Subscription
+    from core.database import engine
+    from models.domain import Subscription
     from datetime import datetime, UTC
     
     now = datetime.now(UTC).replace(tzinfo=None)

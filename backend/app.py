@@ -34,7 +34,7 @@ import jwt
 from sqlmodel import Session, select
 from sqlalchemy import func, text
 from contextlib import asynccontextmanager
-from core.logger import logger
+from core.logger import core.logger
 from services.report_scheduler import daily_report_scheduler_loop
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -79,7 +79,7 @@ async def get_developer_user_id(request: Request) -> int:
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     
     # 3. Check Redis Cache
-    from short_url_gen import redis_client
+    from utils.short_url_gen import core.redis_client
     try:
         cached = redis_client.get(f"api_key:{key_hash}")
         if cached:
@@ -113,7 +113,7 @@ async def get_developer_user_id(request: Request) -> int:
         
     # 5. Check PostgreSQL DB
     with Session(engine) as db_session:
-        from models import ApiKey
+        from models.domain import ApiKey
         statement = select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.is_active == True)
         api_key_entry = db_session.exec(statement).first()
         if not api_key_entry:
@@ -239,7 +239,7 @@ async def lifespan(app: FastAPI):
     # 1. Initialize ARQ redis connection pool
     try:
         from arq import create_pool
-        from arq_settings import redis_settings
+        from services.arq_settings import redis_settings
         app.state.arq_pool = await create_pool(redis_settings)
         logger.info("ARQ Redis pool connection initialized.")
     except Exception as e:
@@ -530,7 +530,7 @@ async def documentation():
 @app.post("/api/support")
 async def create_support_ticket(ticket: SupportTicketRequest, background_tasks: BackgroundTasks):
     try:
-        from support_ticket import process_support_ticket
+        from api.routes.support_ticket import process_support_ticket
         background_tasks.add_task(process_support_ticket, ticket.model_dump())
         return {"status": "success", "message": "Support ticket submitted successfully"}
     except Exception:
@@ -650,7 +650,7 @@ async def verify_payment(req_data: PaymentVerifyRequest, user_id: int = Depends(
         if is_trial_payment:
             user.has_used_trial = True
             
-        from models import Subscription
+        from models.domain import Subscription
         statement = select(Subscription).where(Subscription.user_id == user_id)
         sub = db_session.exec(statement).first()
         
@@ -690,7 +690,7 @@ async def verify_payment(req_data: PaymentVerifyRequest, user_id: int = Depends(
         db_session.commit()
         db_session.refresh(user)
         try:
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             redis_client.delete(f"user_tier:{user_id}")
         except Exception:
             pass
@@ -1062,7 +1062,7 @@ async def delete_user_domain(domain_id: int, user_id: int = Depends(get_required
         db_session.delete(domain)
         db_session.commit()
         try:
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             redis_client.delete(f"dom_owner:{domain.domain_name}")
         except Exception:
             pass
@@ -1174,7 +1174,7 @@ async def toggle_user_tier(user_id: int = Depends(get_required_user_id)):
         
         # Toggle tier
         from datetime import datetime, UTC, timedelta
-        from models import Subscription
+        from models.domain import Subscription
         now = datetime.now(UTC).replace(tzinfo=None)
         
         statement = select(Subscription).where(Subscription.user_id == user_id)
@@ -1232,7 +1232,7 @@ async def toggle_user_tier(user_id: int = Depends(get_required_user_id)):
         db_session.commit()
         db_session.refresh(user)
         try:
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             redis_client.delete(f"user_tier:{user_id}")
         except Exception:
             pass
@@ -1344,7 +1344,7 @@ async def edit_link(short_url: str, edit_data: URLEditRequest, user_id: int = De
 
         # Invalidate/Update Redis cache
         try:
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             is_dynamic = bool(url_entry.webhook_url or url_entry.ios_url or url_entry.android_url or url_entry.password_hash or url_entry.fallback_url or url_entry.activation_time or url_entry.custom_countdown_url)
             
             is_expired = False
@@ -1386,7 +1386,7 @@ async def delete_link(short_url: str, user_id: int = Depends(get_required_user_i
 
         # Delete from Redis
         try:
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             redis_client.delete(short_url)
         except Exception:
             pass
@@ -1413,7 +1413,7 @@ async def delete_user_account(user_id: int = Depends(get_required_user_id)):
             db_session.delete(link)
             # Remove link from Redis
             try:
-                from short_url_gen import redis_client
+                from utils.short_url_gen import core.redis_client
                 redis_client.delete(link.short_url)
             except Exception:
                 pass
@@ -1429,7 +1429,7 @@ async def delete_user_account(user_id: int = Depends(get_required_user_id)):
         # Delete from Firebase Auth if firebase UID is available
         if oauth_provider == "firebase" and oauth_id:
             try:
-                from firebase_admin import auth as firebase_auth
+                from firebase_admin import api.routes.auth as firebase_auth
                 firebase_auth.delete_user(oauth_id)
             except Exception as e:
                 logger.warning(f"Failed to delete user from Firebase Auth: {e}")
@@ -1793,7 +1793,7 @@ async def add_long_give_short(request: URLRequest, req: Request, background_task
                 status_code=400, 
                 detail="Custom alias must be 3-20 characters long, contain only letters, numbers, dashes or underscores, and cannot be a reserved system route."
             )
-        from database import is_alias_exists
+        from core.database import is_alias_exists
         if is_alias_exists(custom_alias):
             raise HTTPException(
                 status_code=400,
@@ -1861,7 +1861,7 @@ async def add_long_give_short(request: URLRequest, req: Request, background_task
             if forwarded:
                 client_ip = forwarded.split(",")[0].strip()
                 
-            from short_url_gen import redis_client
+            from utils.short_url_gen import core.redis_client
             redis_key = f"anon_limit:{client_ip}"
             try:
                 current_count = redis_client.incr(redis_key)
@@ -1993,7 +1993,7 @@ async def post_password_gate(short_url: str, request: Request):
 @app.get("/api/developer/keys")
 async def get_api_keys(user_id: int = Depends(get_required_user_id)):
     with Session(engine) as db_session:
-        from models import ApiKey
+        from models.domain import ApiKey
         statement = select(ApiKey).where(ApiKey.user_id == user_id, ApiKey.is_active == True)
         keys = db_session.exec(statement).all()
         return [
@@ -2017,7 +2017,7 @@ async def create_api_key(request: APIKeyCreateRequest, user_id: int = Depends(ge
         raw_key = f"flx_{secrets.token_hex(24)}"
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
         
-        from models import ApiKey
+        from models.domain import ApiKey
         new_key = ApiKey(
             key_hash=key_hash,
             name=request.name,
@@ -2038,7 +2038,7 @@ async def create_api_key(request: APIKeyCreateRequest, user_id: int = Depends(ge
 @app.delete("/api/developer/keys/{key_id}")
 async def revoke_api_key(key_id: int, user_id: int = Depends(get_required_user_id)):
     with Session(engine) as db_session:
-        from models import ApiKey
+        from models.domain import ApiKey
         key_entry = db_session.get(ApiKey, key_id)
         if not key_entry or key_entry.user_id != user_id:
             raise HTTPException(status_code=404, detail="API Key not found")
@@ -2047,7 +2047,7 @@ async def revoke_api_key(key_id: int, user_id: int = Depends(get_required_user_i
         db_session.add(key_entry)
         db_session.commit()
         
-        from short_url_gen import redis_client
+        from utils.short_url_gen import core.redis_client
         try:
             redis_client.delete(f"api_key:{key_entry.key_hash}")
         except Exception:
@@ -2075,7 +2075,7 @@ async def developer_shorten_link(
                 status_code=400, 
                 detail="Custom alias must be 3-20 characters long and contain only letters, numbers, dashes, or underscores."
             )
-        from database import is_alias_exists
+        from core.database import is_alias_exists
         if is_alias_exists(custom_alias):
             raise HTTPException(status_code=400, detail="Custom alias is already in use")
             
@@ -2105,7 +2105,7 @@ async def developer_shorten_link(
                 raise HTTPException(status_code=400, detail="Domain is either unverified or does not belong to you.")
         selected_domain = request.domain
         
-    from short_url_gen import add_custom_url, add_url
+    from utils.short_url_gen import add_custom_url, add_url
     if custom_alias:
         short_code = add_custom_url(
             long_url, custom_alias, user_id=user_id, exp_time=None,
@@ -2161,7 +2161,7 @@ async def developer_batch_shorten(
                 if not is_valid_custom_alias(custom_alias):
                     results.append({"status": "error", "long_url": long_url, "error": "Invalid custom alias format"})
                     continue
-                from database import is_alias_exists
+                from core.database import is_alias_exists
                 if is_alias_exists(custom_alias):
                     results.append({"status": "error", "long_url": long_url, "error": "Custom alias is already in use"})
                     continue
@@ -2199,7 +2199,7 @@ async def developer_batch_shorten(
                         continue
                 selected_domain = link_req.domain
                 
-            from short_url_gen import add_custom_url, add_url
+            from utils.short_url_gen import add_custom_url, add_url
             if custom_alias:
                 short_code = add_custom_url(
                     long_url, custom_alias, user_id=user_id, exp_time=None,

@@ -7,7 +7,7 @@ from datetime import UTC, timedelta
 from sqlmodel import Session, select, func
 from core.database import engine
 from models.domain import clicklog, urldata, Subscription, User
-from utils.short_url_gen import redis_client
+from utils.short_url_gen import core.redis_client
 from core.logger import logger, log_file
 
 # Fetch configuration parameters

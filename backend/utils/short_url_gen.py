@@ -3,9 +3,9 @@ from datetime import datetime , UTC, timedelta
 from utils.base62 import encode_base62
 from models.domain import urldata
 from core.database import add_to_db, get_long_url, is_long_url_exists, mark_url_banned, is_alias_exists
-from core.logger import logger
-# from validations import check_safe_browsing
-from core.redis_client import redis_client
+from core.logger import core.logger
+# from utils.validations import check_safe_browsing
+from core.redis_client import core.redis_client
 
 
 
