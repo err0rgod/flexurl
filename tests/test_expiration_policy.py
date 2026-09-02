@@ -3,10 +3,9 @@ import sys
 import unittest
 from datetime import datetime, timedelta
 
+from utils.expiration_policy import calculate_link_expiration
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "backend"))
-
-from expiration_policy import calculate_link_expiration
 
 
 class TestExpirationPolicy(unittest.TestCase):

@@ -6,12 +6,9 @@ from dotenv import load_dotenv
 from sqlmodel import Session, select
 from unittest.mock import patch
 
-# Add backend directory to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "backend"))
-
-from models import urldata, clicklog
-from database import engine, get_long_url
-from short_url_gen import redis_client
+from models.domain import urldata, clicklog
+from core.database import engine, get_long_url
+from utils.short_url_gen import redis_client
 from app import app
 from fastapi.testclient import TestClient
 
@@ -29,7 +26,7 @@ class TestRedirects(unittest.TestCase):
         redis_client.delete("testcustomsched")
 
         # Create testing users
-        from models import User
+        from models.domain import User
         with Session(engine) as session:
             stmt_p = select(User).where(User.email == "testpremium@example.com")
             existing_p = session.exec(stmt_p).first()
@@ -38,7 +35,7 @@ class TestRedirects(unittest.TestCase):
             
             user_ids = [u.id for u in [existing_p, existing_f] if u is not None]
             if user_ids:
-                from models import CustomDomain
+                from models.domain import CustomDomain
                 dom_stmt = select(CustomDomain).where(CustomDomain.user_id.in_(user_ids))
                 doms = session.exec(dom_stmt).all()
                 for dom in doms:
@@ -55,7 +52,7 @@ class TestRedirects(unittest.TestCase):
                     session.delete(url)
                 session.commit()
             
-            from models import Subscription
+            from models.domain import Subscription
             if existing_p:
                 sub_p_stmt = select(Subscription).where(Subscription.user_id == existing_p.id)
                 sub_p = session.exec(sub_p_stmt).first()
@@ -98,7 +95,7 @@ class TestRedirects(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        from models import User
+        from models.domain import User
         with Session(engine) as session:
             stmt_p = select(User).where(User.email == "testpremium@example.com")
             existing_p = session.exec(stmt_p).first()
@@ -107,7 +104,7 @@ class TestRedirects(unittest.TestCase):
             
             user_ids = [u.id for u in [existing_p, existing_f] if u is not None]
             if user_ids:
-                from models import CustomDomain
+                from models.domain import CustomDomain
                 dom_stmt = select(CustomDomain).where(CustomDomain.user_id.in_(user_ids))
                 doms = session.exec(dom_stmt).all()
                 for dom in doms:
@@ -124,7 +121,7 @@ class TestRedirects(unittest.TestCase):
                     session.delete(url)
                 session.commit()
                     
-            from models import Subscription
+            from models.domain import Subscription
             if existing_p:
                 sub_p_stmt = select(Subscription).where(Subscription.user_id == existing_p.id)
                 sub_p = session.exec(sub_p_stmt).first()
@@ -145,7 +142,7 @@ class TestRedirects(unittest.TestCase):
 
     def tearDown(self):
         # Clean up database entries after each test
-        from models import clicklog
+        from models.domain import clicklog
         with Session(engine) as session:
             stmt_urls = select(urldata).where(urldata.user_id.in_([self.premium_user.id, self.free_user.id]))
             urls = session.exec(stmt_urls).all()
@@ -177,7 +174,7 @@ class TestRedirects(unittest.TestCase):
 
     def test_expired_link_returns_410(self):
         # 1. Create a link in the DB that expired 1 hour ago (timezone naive)
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         exp_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
         add_custom_url(
             long_url="https://example.com/expired-target",
@@ -195,7 +192,7 @@ class TestRedirects(unittest.TestCase):
 
     def test_timezone_aware_expiration(self):
         # Create a link in the DB that expired 1 hour ago (timezone aware UTC)
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         exp_time = datetime.now(UTC) - timedelta(hours=1)
         add_custom_url(
             long_url="https://example.com/aware-target",
@@ -212,7 +209,7 @@ class TestRedirects(unittest.TestCase):
 
     def test_valid_link_redirects_302(self):
         # Create a valid link
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         add_custom_url(
             long_url="https://example.com/valid-target",
             custom_alias="testvalid",
@@ -232,8 +229,8 @@ class TestRedirects(unittest.TestCase):
 
     def test_banned_link_returns_403(self):
         # Create a banned link
-        from short_url_gen import add_custom_url, ban_in_cache
-        from database import mark_url_banned
+        from utils.short_url_gen import add_custom_url, ban_in_cache
+        from core.database import mark_url_banned
         add_custom_url(
             long_url="https://example.com/banned-target",
             custom_alias="testban",
@@ -251,7 +248,7 @@ class TestRedirects(unittest.TestCase):
         self.assertIn("Security Warning", response.text)
 
     def test_scheduled_link_shows_countdown(self):
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         activation_time = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
         add_custom_url(
             long_url="https://example.com/sched-target",
@@ -266,7 +263,7 @@ class TestRedirects(unittest.TestCase):
         self.assertIn("window.__ACTIVATION_TIME__", response.text)
 
     def test_scheduled_link_redirects_custom_countdown_url(self):
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         activation_time = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
         add_custom_url(
             long_url="https://example.com/sched-target",
@@ -281,7 +278,7 @@ class TestRedirects(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://google.com")
 
     def test_scheduled_link_already_active(self):
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         activation_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=10)
         add_custom_url(
             long_url="https://example.com/sched-target-past",
@@ -448,8 +445,8 @@ class TestRedirects(unittest.TestCase):
     def test_user_links_does_not_invent_expiration_for_permanent_free_link(self):
         import jwt
         from app import JWT_SECRET_KEY
-        from models import User
-        from short_url_gen import add_custom_url
+        from models.domain import User
+        from utils.short_url_gen import add_custom_url
 
         add_custom_url(
             long_url="https://example.com/free-permanent-listing",
@@ -489,7 +486,7 @@ class TestRedirects(unittest.TestCase):
         mock_is_valid.return_value = True
         import jwt
         from app import JWT_SECRET_KEY
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
 
         destination = "https://example.com/adopt-anonymous-as-permanent"
         add_custom_url(
@@ -518,7 +515,7 @@ class TestRedirects(unittest.TestCase):
         mock_is_valid.return_value = True
         import jwt
         from app import JWT_SECRET_KEY
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         
         add_custom_url(
             long_url="https://google.com",
@@ -547,7 +544,7 @@ class TestRedirects(unittest.TestCase):
     def test_free_user_cannot_edit_link(self):
         import jwt
         from app import JWT_SECRET_KEY
-        from short_url_gen import add_custom_url
+        from utils.short_url_gen import add_custom_url
         
         add_custom_url(
             long_url="https://google.com",
@@ -621,9 +618,9 @@ class TestRedirects(unittest.TestCase):
         self.assertEqual(response.json()["status"], "success")
         
     def test_check_allowed_domain_endpoint(self):
-        from models import CustomDomain
+        from models.domain import CustomDomain
         from sqlmodel import Session
-        from database import engine
+        from core.database import engine
 
         # Register custom domain in DB
         with Session(engine) as db_session:
@@ -686,9 +683,9 @@ class TestRedirects(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
         # Clean up valid domain
-        from models import CustomDomain
+        from models.domain import CustomDomain
         from sqlmodel import Session, select
-        from database import engine
+        from core.database import engine
         with Session(engine) as db_session:
             stmt = select(CustomDomain).where(CustomDomain.domain_name == "sub.brand-new.io")
             entry = db_session.exec(stmt).first()
@@ -708,9 +705,9 @@ class TestRedirects(unittest.TestCase):
 
     def test_custom_domain_access_constraints(self):
         # 1. Register and verify a custom domain for premium user
-        from models import CustomDomain, urldata
+        from models.domain import CustomDomain, urldata
         from sqlmodel import Session, select
-        from database import engine
+        from core.database import engine
         
         with Session(engine) as db_session:
             dom = CustomDomain(domain_name="mybrand-links.com", user_id=self.premium_user.id, is_verified=True)
