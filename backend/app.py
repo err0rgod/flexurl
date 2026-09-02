@@ -1637,6 +1637,7 @@ async def get_short_give_long(short_url: str, request : Request):
                     "ios_url": url_db.ios_url,
                     "android_url": url_db.android_url,
                     "fallback_url": url_db.fallback_url,
+                    "custom_countdown_url": url_db.custom_countdown_url,
                     "activation_time": url_db.activation_time.isoformat() if url_db.activation_time else None,
                     "exp_time": url_db.exp_time.isoformat() if url_db.exp_time else None,
                     "password_hash": url_db.password_hash,
@@ -1732,7 +1733,7 @@ async def get_short_give_long(short_url: str, request : Request):
                 logger.debug(f"Queue enqueue duration: {duration:.4f}s")
                 logger.debug(f"Analytics enqueued for short_url: {short_url}")
             else:
-                logger.warning("ARQ pool not initialized, skipped enqueueing.")
+                logger.warning("ARQ pool not initialized, sync mode."); from services.arq_worker import record_analytics; await record_analytics({}, event)
         except Exception as eq_err:
             logger.warning(f"Failed to enqueue analytics: {eq_err}")
 
@@ -1760,7 +1761,7 @@ async def get_short_give_long(short_url: str, request : Request):
                 logger.debug(f"Queue enqueue duration: {duration:.4f}s")
                 logger.debug(f"Analytics enqueued for short_url: {short_url}")
             else:
-                logger.warning("ARQ pool not initialized, skipped enqueueing.")
+                logger.warning("ARQ pool not initialized, sync mode."); from services.arq_worker import record_analytics; await record_analytics({}, event)
         except Exception as eq_err:
             logger.warning(f"Failed to enqueue analytics: {eq_err}")
 

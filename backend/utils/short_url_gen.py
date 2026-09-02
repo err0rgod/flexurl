@@ -325,6 +325,7 @@ def serve_url(short_url : str):
             "ios_url": url.ios_url,
             "android_url": url.android_url,
             "fallback_url": url.fallback_url,
+            "custom_countdown_url": url.custom_countdown_url,
             "activation_time": url.activation_time.isoformat() if url.activation_time else None,
             "exp_time": url.exp_time.isoformat() if url.exp_time else None,
             "password_hash": url.password_hash,

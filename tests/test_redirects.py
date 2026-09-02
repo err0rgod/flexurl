@@ -17,7 +17,10 @@ class TestRedirects(unittest.TestCase):
     def setUpClass(cls):
         load_dotenv()
         cls.client = TestClient(app)
+        from app import load_html_templates
+        load_html_templates()
         # Clear redis cache for our test key to ensure fresh database lookup
+        redis_client.flushdb()
         redis_client.delete("testexp")
         redis_client.delete("testvalid")
         redis_client.delete("testban")
@@ -164,6 +167,7 @@ class TestRedirects(unittest.TestCase):
                     session.delete(res)
             session.commit()
         # Clean up redis
+        redis_client.flushdb()
         redis_client.delete("testexp")
         redis_client.delete("testvalid")
         redis_client.delete("testban")
@@ -222,6 +226,9 @@ class TestRedirects(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://example.com/valid-target")
 
         # Verify that click count has incremented to 1
+        from services.arq_worker import flush_clicks
+        import asyncio
+        asyncio.run(flush_clicks(None))
         with Session(engine) as session:
             statement = select(urldata).where(urldata.short_url == "testvalid")
             res = session.exec(statement).first()
@@ -325,7 +332,7 @@ class TestRedirects(unittest.TestCase):
         mock_is_valid.return_value = True
         mock_add_url.return_value = "testanondefault"
 
-        with patch("short_url_gen.redis_client") as mock_redis:
+        with patch("utils.short_url_gen.redis_client") as mock_redis:
             mock_redis.incr.return_value = 1
             before = datetime.now(UTC).replace(tzinfo=None)
             response = self.client.post("/shorten", json={
@@ -347,7 +354,7 @@ class TestRedirects(unittest.TestCase):
         mock_is_valid.return_value = True
         mock_add_url.return_value = "testanoncap"
 
-        with patch("short_url_gen.redis_client") as mock_redis:
+        with patch("utils.short_url_gen.redis_client") as mock_redis:
             mock_redis.incr.return_value = 1
             before = datetime.now(UTC).replace(tzinfo=None)
             response = self.client.post("/shorten?exp_time=720", json={
