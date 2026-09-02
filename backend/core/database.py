@@ -159,7 +159,7 @@ def is_long_url_exists(
             
         # If logged in, check if there is an anonymous link we can adopt
         if user_id and domain is None:
-            statement = select(urldata).where(urldata.long_url == long_url).where(urldata.user_id == None).where(urldata.domain == None)
+            statement = select(urldata).where(urldata.long_url == long_url).where(urldata.user_id is None).where(urldata.domain is None)
             results = session.exec(statement).first()
             if results is not None:
                 results.user_id = user_id

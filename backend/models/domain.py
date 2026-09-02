@@ -1,6 +1,7 @@
-from sqlmodel import SQLModel, Field, Field as SQLField
 from typing import Optional
 from datetime import datetime, UTC
+from pydantic import BaseModel
+from sqlmodel import SQLModel, Field
 
 
 
@@ -78,7 +79,6 @@ class CustomDomain(SQLModel, table=True):
     cloudflare_id: Optional[str] = Field(default=None, nullable=True)
 
 
-from pydantic import BaseModel, Field
 
 class URLRequest(BaseModel):
     long_url: str = Field(..., max_length=2048)
@@ -111,18 +111,18 @@ class Subscription(SQLModel, table=True):
     """
     __tablename__ = "subscriptions"
     
-    id: Optional[int] = SQLField(default=None, primary_key=True)
-    user_id: int = SQLField(foreign_key="users.id", index=True, unique=True, ondelete="CASCADE")
-    tier: str = SQLField(default="free") # free, startup, business
-    status: str = SQLField(default="active") # active, relaxation, expired
-    current_period_start: datetime = SQLField(default_factory=datetime.utcnow)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True, unique=True, ondelete="CASCADE")
+    tier: str = Field(default="free") # free, startup, business
+    status: str = Field(default="active") # active, relaxation, expired
+    current_period_start: datetime = Field(default_factory=datetime.utcnow)
     current_period_end: datetime
-    relaxation_days_remaining: int = SQLField(default=7, nullable=False)
+    relaxation_days_remaining: int = Field(default=7, nullable=False)
     
-    dunning_warn_sent: bool = SQLField(default=False)
-    dunning_expired_sent: bool = SQLField(default=False)
-    dunning_ended_sent: bool = SQLField(default=False)
-    is_trial: bool = SQLField(default=False)
+    dunning_warn_sent: bool = Field(default=False)
+    dunning_expired_sent: bool = Field(default=False)
+    dunning_ended_sent: bool = Field(default=False)
+    is_trial: bool = Field(default=False)
 
 
 class QuoteRequest(BaseModel):
@@ -160,12 +160,12 @@ class ApiKey(SQLModel, table=True):
     """
     __tablename__ = "api_keys"
     
-    id: Optional[int] = SQLField(default=None, primary_key=True)
-    key_hash: str = SQLField(index=True, unique=True, nullable=False)
-    name: str = SQLField(max_length=255, nullable=False)
-    user_id: int = SQLField(foreign_key="users.id", nullable=False)
-    created_at: datetime = SQLField(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
-    is_active: bool = SQLField(default=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key_hash: str = Field(index=True, unique=True, nullable=False)
+    name: str = Field(max_length=255, nullable=False)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
+    is_active: bool = Field(default=True)
 
 
 class APIKeyCreateRequest(BaseModel):

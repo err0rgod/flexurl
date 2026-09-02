@@ -1,3 +1,5 @@
+import re
+import socket
 from pydantic import AnyHttpUrl, ValidationError, TypeAdapter
 import httpx
 import os
@@ -48,7 +50,6 @@ async def is_live_url(url: str) -> bool:
         except Exception:
             return False 
 
-import socket
 
 def get_resolved_ips(hostname: str) -> list[str]:
     """Resolves a hostname to a list of IP addresses (both IPv4 and IPv6)."""
@@ -112,7 +113,6 @@ async def is_valid_url(url: str) -> bool:
     except ValidationError:
         return False
 
-import re
 
 RESERVED_ALIASES = {
     "login", "signup", "dashboard", "analytics", "auth", "api", "privacy", 

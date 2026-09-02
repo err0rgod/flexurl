@@ -56,7 +56,7 @@ def parse_referer(referer_header : str) -> str:
             return "Reddit"
         
         return domain if domain else "Direct/Email"
-    except:
+    except Exception:
         return "Direct/Email"
     
 async def get_ip_country(ip : str)-> str:
@@ -79,7 +79,7 @@ async def get_ip_location(ip : str) -> tuple[str, str]:
                     country = data.get("country", "Unknown")
                     city = data.get("city", "Unknown")
                     return country, city
-        except:
+        except Exception:
             pass
         return "Unknown", "Unknown"
 

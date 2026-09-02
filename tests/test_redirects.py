@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.append(os.path.join(os.path.dirname(__file__), "backend"))
 
 from models import urldata, clicklog
-from database import engine, get_long_url, add_to_db
+from database import engine, get_long_url
 from short_url_gen import redis_client
 from app import app
 from fastapi.testclient import TestClient
