@@ -1,43 +1,47 @@
-import sys
 import os
+import sys
+import jwt
+import time
 import json
 import asyncio
 import hashlib
+import razorpay
 from html import escape
-
-# Ensure the backend directory is in python path for local imports
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.append(BASE_DIR)
-
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Response, Depends
-from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
-from utils.short_url_gen import add_url, serve_url, ban_in_cache, add_custom_url, get_user_tier, redis_client
-from core.database import mark_url_banned, init_db, add_clicklog, engine
-from utils.validations import is_valid_url, check_safe_browsing, is_valid_custom_alias
+from typing import Optional
+from core.logger import logger
+from sqlalchemy import func, text
+from datetime import datetime, UTC
+from sqlmodel import Session, select
+from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
 from utils.ratelimit import RateLimiterStore
 from api.routes.auth import router as auth_router
 from api.routes.quotation import process_quotation
 from services.cloudflare_saas import CloudflareSaaSManager
 from utils.expiration_policy import calculate_link_expiration
+from services.report_scheduler import daily_report_scheduler_loop
+from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Response, Depends
+from utils.short_url_gen import add_url, serve_url, ban_in_cache, add_custom_url, get_user_tier, redis_client
+from core.database import mark_url_banned, init_db, engine
+from utils.validations import is_valid_url, check_safe_browsing, is_valid_custom_alias
 from models.domain import (
     clicklog, urldata, User, CustomDomain, URLRequest, URLEditRequest,
     QuoteRequest, SupportTicketRequest, PaymentOrderRequest, PaymentVerifyRequest,
-    CustomDomainRequest, ApiKey, APIKeyCreateRequest, DeveloperURLRequest,
+    CustomDomainRequest, APIKeyCreateRequest, DeveloperURLRequest,
     DeveloperBatchURLRequest
 )
-from utils.analytics_parser import parse_referer, parse_user_agent, get_ip_country, get_ip_location, check_is_bot
-from typing import Optional
-from datetime import datetime, UTC
-import time
-import jwt
-from sqlmodel import Session, select
-from sqlalchemy import func, text
-from contextlib import asynccontextmanager
-from core.logger import logger
-from services.report_scheduler import daily_report_scheduler_loop
+
+# Ensure the backend directory is in python path for local imports
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
+
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
 
 # Auth dependency helpers
@@ -114,7 +118,7 @@ async def get_developer_user_id(request: Request) -> int:
     # 5. Check PostgreSQL DB
     with Session(engine) as db_session:
         from models.domain import ApiKey
-        statement = select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.is_active == True)
+        statement = select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.is_active)
         api_key_entry = db_session.exec(statement).first()
         if not api_key_entry:
             raise HTTPException(status_code=401, detail="Invalid or revoked API Key")
@@ -158,11 +162,7 @@ async def get_developer_user_id(request: Request) -> int:
         return user.id
 
 
-# get_user_tier is imported from short_url_gen
 
-import razorpay
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 
 razorpay_client = None
 if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
@@ -271,7 +271,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-from fastapi.staticfiles import StaticFiles
+
 app.mount("/static", StaticFiles(directory=os.path.join(FRONTEND_DIR, "static")), name="static")
 
 app.include_router(auth_router)
@@ -786,7 +786,7 @@ async def get_url_analytics(short_url: str, user_id: int = Depends(get_required_
             bot_clicks = db_session.exec(
                 select(func.count(clicklog.id))
                 .where(clicklog.short_url == short_url)
-                .where(clicklog.is_bot == True)
+                .where(clicklog.is_bot)
             ).one()
 
             # Premium: 5 most recent click logs
@@ -1344,16 +1344,7 @@ async def edit_link(short_url: str, edit_data: URLEditRequest, user_id: int = De
 
         # Invalidate/Update Redis cache
         try:
-            from utils.short_url_gen import redis_client
-            is_dynamic = bool(url_entry.webhook_url or url_entry.ios_url or url_entry.android_url or url_entry.password_hash or url_entry.fallback_url or url_entry.activation_time or url_entry.custom_countdown_url)
-            
-            is_expired = False
-            if url_entry.exp_time:
-                exp_utc = url_entry.exp_time.astimezone(UTC).replace(tzinfo=None) if url_entry.exp_time.tzinfo else url_entry.exp_time
-                now_utc = datetime.now(UTC).replace(tzinfo=None)
-                if exp_utc < now_utc:
-                    is_expired = True
-
+            from utils.short_url_gen import redis_client            
             redis_client.delete(short_url)
             logger.debug(f"Redis cache invalidated on edit for short_url: {short_url}")
         except Exception as e:
@@ -1531,7 +1522,7 @@ async def analytics(short_url: str, user_id: Optional[int] = Depends(get_optiona
             bot_clicks = db_session.exec(
                 select(func.count(clicklog.id))
                 .where(clicklog.short_url == short_url)
-                .where(clicklog.is_bot == True)
+                .where(clicklog.is_bot)
             ).one()
 
             # Premium: 5 most recent click logs
@@ -1919,7 +1910,7 @@ async def add_long_give_short(request: URLRequest, req: Request, background_task
             if not is_premium_user:
                 raise HTTPException(status_code=400, detail="Custom domain integration is a premium-only feature.")
             with Session(engine) as db_session:
-                stmt = select(CustomDomain).where(CustomDomain.domain_name == request.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified == True)
+                stmt = select(CustomDomain).where(CustomDomain.domain_name == request.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified)
                 dom_entry = db_session.exec(stmt).first()
                 if not dom_entry:
                     raise HTTPException(status_code=400, detail="Domain is either unverified or does not belong to you.")
@@ -1994,7 +1985,7 @@ async def post_password_gate(short_url: str, request: Request):
 async def get_api_keys(user_id: int = Depends(get_required_user_id)):
     with Session(engine) as db_session:
         from models.domain import ApiKey
-        statement = select(ApiKey).where(ApiKey.user_id == user_id, ApiKey.is_active == True)
+        statement = select(ApiKey).where(ApiKey.user_id == user_id, ApiKey.is_active)
         keys = db_session.exec(statement).all()
         return [
             {
@@ -2099,7 +2090,7 @@ async def developer_shorten_link(
     selected_domain = None
     if request.domain and request.domain != "flexurl.app":
         with Session(engine) as db_session:
-            stmt = select(CustomDomain).where(CustomDomain.domain_name == request.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified == True)
+            stmt = select(CustomDomain).where(CustomDomain.domain_name == request.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified)
             dom_entry = db_session.exec(stmt).first()
             if not dom_entry:
                 raise HTTPException(status_code=400, detail="Domain is either unverified or does not belong to you.")
@@ -2192,7 +2183,7 @@ async def developer_batch_shorten(
             selected_domain = None
             if link_req.domain and link_req.domain != "flexurl.app":
                 with Session(engine) as db_session:
-                    stmt = select(CustomDomain).where(CustomDomain.domain_name == link_req.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified == True)
+                    stmt = select(CustomDomain).where(CustomDomain.domain_name == link_req.domain).where(CustomDomain.user_id == user_id).where(CustomDomain.is_verified)
                     dom_entry = db_session.exec(stmt).first()
                     if not dom_entry:
                         results.append({"status": "error", "long_url": long_url, "error": "Domain is unverified or does not belong to you"})

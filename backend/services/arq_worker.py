@@ -1,5 +1,3 @@
-import asyncio
-import os
 import uuid
 import httpx
 from datetime import datetime, UTC

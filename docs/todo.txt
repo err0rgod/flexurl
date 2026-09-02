@@ -1,12 +1,3 @@
-
-
-docs
-
-
-alternative to geoIP
 CI/CD setup
 autopay
 add turnstile and zerotrust on admin pages other cloud flare features 
-create web crawler for leads
-
-

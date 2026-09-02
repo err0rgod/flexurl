@@ -2,7 +2,7 @@ from sonyflake import SonyFlake
 from datetime import datetime , UTC, timedelta
 from utils.base62 import encode_base62
 from models.domain import urldata
-from core.database import add_to_db, get_long_url, is_long_url_exists, mark_url_banned, is_alias_exists
+from core.database import add_to_db, is_long_url_exists, is_alias_exists
 from core.logger import logger
 # from utils.validations import check_safe_browsing
 from core.redis_client import redis_client
@@ -174,7 +174,7 @@ def ban_in_cache(short_url: str):
 import json
 from sqlmodel import Session, select
 from core.database import engine
-from models.domain import urldata, Subscription, User
+from models.domain import Subscription, User
 
 def get_user_tier(user_id: int, db_session: Session) -> str:
     redis_key = f"user_tier:{user_id}"

@@ -22,7 +22,7 @@ async def check_safe_browsing(url: str) -> bool:
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
-                f"https://safebrowsing.googleapis.com/v5/uris:batchGet",
+                "https://safebrowsing.googleapis.com/v5/uris:batchGet",
                 params={"key": SAFE_BROWSING},
                 json=payload,
                 timeout=5
