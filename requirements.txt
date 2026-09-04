@@ -10,3 +10,4 @@ pydantic[email]
 firebase-admin
 razorpay
 arq
+gunicorn
