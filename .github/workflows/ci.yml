@@ -47,4 +47,4 @@ jobs:
             pip install -r requirements.txt
             # Restart FastAPI and ARQ background worker
             sudo systemctl restart urlshortener
-            sudo systemctl restart arq-worker || true
+            sudo systemctl restart flexurl-worker.service
