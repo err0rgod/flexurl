@@ -19,8 +19,6 @@ engine = create_engine(
 )
 
 
-
-
 def init_db():
     """
     Initializes the PostgreSQL database schema by creating all tables defined 
