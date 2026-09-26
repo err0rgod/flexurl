@@ -45,6 +45,11 @@ jobs:
             git pull origin main
             source venv/bin/activate
             pip install -r requirements.txt
-            # Restart FastAPI and ARQ background worker
+            # Update systemd services
+            sudo cp deploy/cache-warmer.service /etc/systemd/system/cache-warmer.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable cache-warmer.service
+            # Restart FastAPI, ARQ background worker, and cache warmer
             sudo systemctl restart urlshortener
             sudo systemctl restart flexurl-worker.service
+            sudo systemctl restart cache-warmer.service

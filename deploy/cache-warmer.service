@@ -1,0 +1,17 @@
+[Unit]
+Description=ZeroDaily Cache Warmer Service
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/urlshortener
+Environment="PATH=/home/ubuntu/urlshortener/venv/bin"
+ExecStart=/home/ubuntu/urlshortener/venv/bin/python -u /home/ubuntu/urlshortener/scripts/cache_warmer.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
