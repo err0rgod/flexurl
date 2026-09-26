@@ -135,5 +135,16 @@ pytest tests/
 - **Badge Counter:** If using the standalone SVG Badge Counter, route `/badge/` traffic to the standalone badge service running on port 8010.
 - **Worker Daemon:** Keep the ARQ worker running as a persistent systemd daemon alongside the main API.
 
+## Contributing & Security
+
+- **[Contributing Guide](CONTRIBUTING.md):** Guidelines for local environment setup, code style, and submitting pull requests.
+- **[Code of Conduct](CODE_OF_CONDUCT.md):** Our community standards and expectations.
+- **[Security Policy](SECURITY.md):** Information on vulnerability reporting and responsible disclosure.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) © 2026 Nirbhay Katiyar ([@err0rgod](https://github.com/err0rgod)).
+
 ---
-*Maintained by Nirbhay Katiyar (@err0rgod)*
+*Maintained by Nirbhay Katiyar ([@err0rgod](https://github.com/err0rgod))*
+

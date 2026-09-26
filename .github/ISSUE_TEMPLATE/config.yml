@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Security Advisory
+    url: https://github.com/err0rgod/flexurl/security/advisories/new
+    about: Please report security vulnerabilities privately here.
+  - name: Questions & Discussions
+    url: https://github.com/err0rgod/flexurl/discussions
+    about: Ask questions and discuss features with the community.
