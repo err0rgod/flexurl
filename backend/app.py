@@ -477,17 +477,30 @@ async def dancing_meme():
 @app.get("/", response_class=HTMLResponse)
 async def index():  
     with open(os.path.join(FRONTEND_DIR, "index.html"), encoding="utf-8") as f:
-        return f.read()
+        content = f.read()
+    return HTMLResponse(
+        content=content,
+        headers={"Cache-Control": "public, max-age=300, s-maxage=300"},
+    )
 
 # essential legal files
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy():
     with open(os.path.join(FRONTEND_DIR, "privacy.html"), encoding="utf-8") as f:
-        return f.read()
+        content = f.read()
+    return HTMLResponse(
+        content=content,
+        headers={"Cache-Control": "public, max-age=300, s-maxage=300"},
+    )
+
 @app.get("/terms", response_class=HTMLResponse)
 async def terms():
     with open(os.path.join(FRONTEND_DIR, "terms.html"), encoding="utf-8") as f:
-        return f.read()
+        content = f.read()
+    return HTMLResponse(
+        content=content,
+        headers={"Cache-Control": "public, max-age=300, s-maxage=300"},
+    )
 
 
 # login endpoint 

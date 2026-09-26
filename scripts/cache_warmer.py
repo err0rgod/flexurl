@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import httpx
 
 ENDPOINTS_TO_WARM = [
+    "https://flexurl.app",
     "https://api.zerodaily.in/api/v1/feed?limit=20",
     "https://api.zerodaily.in/api/v1/feed/ai?limit=20",
     "https://api.zerodaily.in/api/v1/feed/cybersec?limit=20",
